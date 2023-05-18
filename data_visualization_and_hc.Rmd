@@ -1,0 +1,250 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(SeuratData)
+library(patchwork)
+library(readxl)
+library(data.table)
+```
+
+```{r}
+InstallData("ifnb")
+
+```
+```{r}
+# Set the working directory to the location of the CSV file
+#setwd("G:\\Courses\\phd_courses\\MATH5473\\math5473_data_lucas")
+
+# Import the CSV file
+data <- read.csv("G:\\Courses\\phd_courses\\MATH5473\\math5473_data_lucas\\data_filtered_for_first_clustering.csv")
+data1 <- read.csv("G:\\Courses\\phd_courses\\MATH5473\\math5473_data_lucas\\data_filtered_for_subtype_clustering.csv")
+label <- read.csv("G:\\Courses\\phd_courses\\MATH5473\\math5473_data_lucas\\data_label_2.csv")
+label<-as.data.frame(label[,2], row.names = label[,1])
+
+rownames(data) <- data[,1] 
+data <- data[,-1]
+rownames(data1) <- data1[,1] 
+data1 <- data1[,-1]
+#dt_overall <- as.data.table(read_excel("data_filtered_for_second_clustering.csv", sheet = "Overall"))
+# View the imported data
+head(data)
+```
+
+
+```{r}
+#deal with the dataset
+y<-1:nrow(label)
+rows<-rownames(label)
+for (x in 1:nrow(label)){
+    y[x]<-substr(rows[x],1,4)
+     
+}
+y<-as.data.frame(y)
+colnames(label)<-"type"
+colnames(y)<-"week"
+rownames(y)<-rownames(label)
+label1<-cbind(label, y)
+```
+
+
+```{r}
+library(randomForest)
+rf_model <- randomForest(x = t(data1), y = as.factor(label[colnames(data1),]), ntree = 100, proximity = TRUE)
+prox_matrix <- rf_model$proximity
+
+# Perform hierarchical clustering
+hclust_result <- hclust(as.dist(1 - prox_matrix), method="complete")
+#dist_matrix <- dist(t(data))  # Compute distance matrix
+#hclust_result <- hclust(dist_matrix)  # Perform hierarchical clustering
+
+# Plot the dendrogram
+#plot(hclust_result, main = "Hierarchical Clustering Dendrogram")
+
+# Cut the dendrogram into clusters
+k <- 20  # Number of desired clusters
+clusters <- cutree(hclust_result, k)
+
+plot(hclust_result, labels = FALSE, main = "Cut Tree Dendrogram")
+rect.hclust(hclust_result, k = k, border = "red")
+
+# Print the cluster assignments
+#print(clusters)
+write.table(as.data.frame(clusters), file = "cluster_assignments_rm.csv", sep = ",", quote = FALSE, row.names = TRUE, col.names = FALSE)
+```
+```{r}
+# Perform hierarchical clustering
+#hclust_result <- hclust(as.dist(1 - prox_matrix), method="complete")
+dist_matrix <- dist(t(data1))  # Compute distance matrix
+hclust_result <- hclust(dist_matrix)  # Perform hierarchical clustering
+
+# Plot the dendrogram
+#plot(hclust_result, main = "Hierarchical Clustering Dendrogram")
+
+# Cut the dendrogram into clusters
+k <- 20  # Number of desired clusters
+clusters <- cutree(hclust_result, k)
+
+plot(hclust_result, labels = FALSE, main = "Cut Tree Dendrogram")
+rect.hclust(hclust_result, k = k, border = "red")
+
+# Print the cluster assignments
+#print(clusters)
+write.table(as.data.frame(clusters), file = "cluster_assignments.csv", sep = ",", quote = FALSE, row.names = TRUE, col.names = FALSE)
+```
+
+
+```{r}
+# Load required libraries
+library(umap)
+library(ggplot2)
+library(Rtsne)
+# Perform PCA
+pca_result <- prcomp(t(data), scale. = TRUE)  # scale. = TRUE for scaling the data
+
+# Extract the PCA coordinates
+pca_coordinates <- as.data.frame(pca_result$x[, 1:2])  # Select the first two principal components
+
+# Perform Tsne
+tsne_result <- Rtsne(t(data))
+
+# Extract the Tsne coordinates
+tsne_coordinates<-as.data.frame(tsne_result$Y, row.names = rownames(t(data)))
+
+# Perform UMAP
+umap_result <- umap(t(data))
+
+# Extract the UMAP coordinates
+umap_coordinates <- as.data.frame(umap_result$layout)
+
+color_map1<-c("excitatory"="red", "npcs"="purple", "opcs"="orange", "unclear"="grey", "astrocytes"="pink", "inter"="cyan", "microglia"="blue")
+color_map2 <- c("GW08"="red", "GW10"="purple", "GW13"="orange", "GW23"="grey", "GW12"="pink", "GW19"="cyan", "GW09"="blue", "GW16"="maroon", "GW26"="salmon")
+# Plot PCA with type subgroup 
+ggplot(pca_coordinates, aes(x = PC1, y = PC2, color=as.matrix(label)), ) +
+  geom_point() +
+  scale_color_manual(values = color_map1) +
+  labs(x = "PC1", y = "PC2", color = "Type") +
+  ggtitle("PCA_Type")
+
+# Plot Tsne with type subgroup 
+ggplot(tsne_coordinates, aes(x = V1, y = V2, color=as.matrix(label)), ) +
+  geom_point() +
+  scale_color_manual(values = color_map1) +
+  labs(x = "TSNE1", y = "TSNE2", color = "Type") +
+  ggtitle("TSNE_Type")
+
+# Plot UMAP with type subgroup 
+ggplot(umap_coordinates, aes(x = V1, y = V2, color=as.matrix(label))) +
+  geom_point() +
+  scale_color_manual(values = color_map1) +
+  labs(x = "UMAP 1", y = "UMAP 2", color = "Type") +
+  ggtitle("UMAP_Type")
+
+# Plot PCA with GW subgroup 
+ggplot(pca_coordinates, aes(x = PC1, y = PC2, color=as.matrix(y)), ) +
+  geom_point() +
+  scale_color_manual(values = color_map2) +
+  labs(x = "PC1", y = "PC2", color = "GW") +
+  ggtitle("PCA_GW")
+
+# Plot Tsne with GW subgroup 
+ggplot(tsne_coordinates, aes(x = V1, y = V2, color=as.matrix(y)), ) +
+  geom_point() +
+  scale_color_manual(values = color_map2) +
+  labs(x = "TSNE1", y = "TSNE2", color = "GW") +
+  ggtitle("TSNE_GW")
+
+# Plot UMAP with GW subgroup 
+ggplot(umap_coordinates, aes(x = V1, y = V2, color=as.matrix(y))) +
+  geom_point() +
+  scale_color_manual(values = color_map2) +
+  labs(x = "UMAP 1", y = "UMAP 2", color = "GW") +
+  ggtitle("UMAP_GW")
+```
+
+
+
+```{r}
+library(stats)
+library(Rtsne)
+library(umap)
+# Assuming your data is stored in a data frame called 'data'
+
+# Perform PCA
+pca_result <- prcomp(data)
+pca_scores <- pca_result$x
+
+# Perform t-SNE
+tsne_result <- Rtsne(data)
+tsne_coordinates <- tsne_result$Y
+
+# Perform UMAP
+umap_result <- umap(data)
+umap_coordinates <- umap_result$layout
+
+# Assuming you have labels or subgroups for each data point stored in a vector called 'labels'
+# Create a data frame with the coordinates and labels
+plot_data <- data.frame(PCA1 = pca_scores[, 1], PCA2 = pca_scores[, 2],
+                        tSNE1 = tsne_coordinates[, 1], tSNE2 = tsne_coordinates[, 2],
+                        UMAP1 = umap_coordinates[, 1], UMAP2 = umap_coordinates[, 2],
+                        labels = label)
+```
+
+```{r}
+seurat_object <- CreateSeuratObject(counts=data1, meta.data=label1[colnames(data1),])
+seurat_object <- NormalizeData(seurat_object)
+# split assay into 24 layers
+seurat_object <- FindVariableFeatures(seurat_object)
+seurat_object <- ScaleData(seurat_object)
+seurat_object <- RunPCA(seurat_object)
+
+```
+```{r}
+seurat_object <- FindNeighbors(seurat_object, dims = 1:30, reduction = "pca")
+seurat_object <- FindClusters(seurat_object, resolution = 2, cluster.name = "unintegrated_clusters")
+```
+```{r}
+seurat_object <- RunUMAP(seurat_object, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
+# visualize by batch and cell type annotation
+# cell type annotations were previously added by Azimuth
+DimPlot(seurat_object, reduction = "umap.unintegrated", group.by = c("type", "predicted.celltype.l2"))
+```
+```{r}
+
+DimPlot(seurat_object, reduction = "umap.unintegrated", group.by = c("week", "predicted.celltype.l2"))
+```
+
+```{r}
+seurat_object <- CreateSeuratObject(counts=data2, meta.data=label1[colnames(data2),])
+seurat_object.list <- SplitObject(seurat_object, split.by = "type")
+seurat_object.list <- lapply(X = seurat_object.list, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 1000)
+})
+
+# select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = seurat_object.list)
+```
+
+
+```{r}
+immune.anchors <- FindIntegrationAnchors(object.list = seurat_object.list, anchor.features = features, dims=1:20)
+# this command creates an 'integrated' data assay
+immune.combined <- IntegrateData(anchorset = immune.anchors, dims = 1:20)
+
+```
+
+```{r}
+# 左边六个细胞，右边按周
+# Visualization
+p1 <- DimPlot(immune.combined, reduction = "umap", group.by = "week")
+p2 <- DimPlot(immune.combined, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+```
+
+
+
